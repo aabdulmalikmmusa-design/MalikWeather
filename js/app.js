@@ -344,13 +344,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 4. 7-Day Forecast Cards
     renderDailySection();
-
-    // 5. Update Interactive Map
-    WeatherMap.updateLocation(
-      state.currentLocation.latitude,
-      state.currentLocation.longitude,
-      state.currentLocation.name
-    );
   }
 
   function renderHourlySection() {
@@ -547,14 +540,20 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Search Input & Autocomplete
+  // Search Input, Clear Button & Autocomplete
   const searchInput = document.getElementById('citySearchInput');
   const searchDropdown = document.getElementById('searchResultsDropdown');
+  const clearSearchBtn = document.getElementById('clearSearchBtn');
   let searchDebounceTimer = null;
 
   if (searchInput && searchDropdown) {
     searchInput.addEventListener('input', (e) => {
       const q = e.target.value.trim();
       clearTimeout(searchDebounceTimer);
+
+      if (clearSearchBtn) {
+        clearSearchBtn.style.display = q.length > 0 ? 'flex' : 'none';
+      }
 
       if (q.length < 2) {
         searchDropdown.classList.remove('active');
@@ -570,15 +569,22 @@ document.addEventListener('DOMContentLoaded', () => {
               const item = document.createElement('div');
               item.className = 'result-item';
               item.innerHTML = `
-                <div class="result-main">
-                  <span class="result-city">${res.name}</span>
-                  <span class="result-admin">${res.admin1 ? res.admin1 + ', ' : ''}${res.country || ''}</span>
+                <div style="display: flex; align-items: center; gap: 0.65rem;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--primary); flex-shrink: 0;">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <circle cx="12" cy="10" r="3"></circle>
+                  </svg>
+                  <div class="result-main">
+                    <span class="result-city">${res.name}</span>
+                    <span class="result-admin">${res.admin1 ? res.admin1 + ', ' : ''}${res.country || ''}</span>
+                  </div>
                 </div>
                 <span class="result-country">${res.country_code || ''}</span>
               `;
               item.addEventListener('click', () => {
                 searchDropdown.classList.remove('active');
                 searchInput.value = '';
+                if (clearSearchBtn) clearSearchBtn.style.display = 'none';
                 loadLocationWeather({
                   name: res.name,
                   country: res.country,
@@ -592,13 +598,32 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             searchDropdown.classList.add('active');
           } else {
-            searchDropdown.innerHTML = `<div style="padding: 1rem; text-align: center; color: var(--text-muted); font-size: 0.85rem;">No cities found for "${q}"</div>`;
+            searchDropdown.innerHTML = `<div style="padding: 1.25rem; text-align: center; color: var(--text-muted); font-size: 0.85rem;">No cities found for "${q}"</div>`;
             searchDropdown.classList.add('active');
           }
         } catch (err) {
           console.warn('Geocoding search failed:', err);
         }
-      }, 250);
+      }, 220);
+    });
+
+    // Clear Search Button
+    if (clearSearchBtn) {
+      clearSearchBtn.addEventListener('click', () => {
+        searchInput.value = '';
+        clearSearchBtn.style.display = 'none';
+        searchDropdown.classList.remove('active');
+        searchInput.focus();
+      });
+    }
+
+    // Global Shortcut (Ctrl+K or Cmd+K) to focus search
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+      }
     });
 
     // Close dropdown on outside click
@@ -625,16 +650,14 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('Geolocation is not supported by your browser', true);
         return;
       }
-      locateBtn.innerHTML = `<span>Locating...</span>`;
+      locateBtn.classList.add('is-locating');
+      const label = locateBtn.querySelector('.locate-label');
+      if (label) label.textContent = 'Locating...';
+
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
-          locateBtn.innerHTML = `
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-            <span>Locate</span>
-          `;
+          locateBtn.classList.remove('is-locating');
+          if (label) label.textContent = 'Locate';
           loadLocationWeather({
             name: 'My Location',
             country: '',
@@ -645,15 +668,11 @@ document.addEventListener('DOMContentLoaded', () => {
           showToast('Updated to your current GPS position');
         },
         (err) => {
-          locateBtn.innerHTML = `
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/>
-              <circle cx="12" cy="12" r="3"/>
-            </svg>
-            <span>Locate</span>
-          `;
+          locateBtn.classList.remove('is-locating');
+          if (label) label.textContent = 'Locate';
           showToast('Unable to retrieve location: ' + err.message, true);
-        }
+        },
+        { timeout: 10000, enableHighAccuracy: true }
       );
     });
   }
@@ -683,7 +702,6 @@ document.addEventListener('DOMContentLoaded', () => {
       state.theme = state.theme === 'light' ? 'dark' : 'light';
       localStorage.setItem('wwd_theme', state.theme);
       updateThemeUI();
-      WeatherMap.setTheme(state.theme);
       if (state.weather) {
         renderDashboard();
       }
@@ -731,13 +749,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Map Layer Buttons
-  document.querySelectorAll('.map-layer-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      WeatherMap.switchLayer(btn.dataset.layer);
-    });
-  });
-
   // Initial Boot
   (async function boot() {
     // Apply initial theme UI
@@ -746,9 +757,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set initial unit toggle visual state
     unitBtns.forEach(b => b.classList.toggle('active', b.dataset.unit === state.unit));
     updateFavoritesBadge();
-
-    // Init Leaflet Map with initial theme
-    await WeatherMap.init('weatherMap', state.currentLocation.latitude, state.currentLocation.longitude, state.theme);
 
     // Load initial weather
     await loadLocationWeather(state.currentLocation);
