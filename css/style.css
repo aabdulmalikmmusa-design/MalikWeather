@@ -1057,7 +1057,7 @@ body {
 }
 
 /* ==========================================================================
-   7-Day Extended Forecast Card
+   7-Day Extended Forecast Card - Left-aligned, max 50% width
    ========================================================================== */
 .forecast-card-wrap {
   background: var(--surface-card);
@@ -1071,6 +1071,10 @@ body {
   flex-direction: column;
   gap: 1.25rem;
   width: 100%;
+  max-width: 50%;
+  margin-right: auto;
+  margin-left: 0;
+  margin-top: 1.75rem;
 }
 
 .daily-forecast-list {
@@ -1081,10 +1085,10 @@ body {
 
 .daily-item {
   display: grid;
-  grid-template-columns: 100px 40px 1fr 110px;
+  grid-template-columns: 80px 32px 1fr 85px;
   align-items: center;
-  gap: 1.25rem;
-  padding: 0.75rem 1.15rem;
+  gap: 0.85rem;
+  padding: 0.65rem 0.95rem;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: var(--radius-md);
@@ -1098,14 +1102,14 @@ body {
 }
 
 .daily-name {
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-weight: 600;
   color: #fff;
 }
 
 .daily-icon {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
 }
 
 .temp-bar-container {
@@ -1395,6 +1399,10 @@ body {
   .location-title {
     font-size: 1.75rem;
   }
+  .forecast-card-wrap {
+    max-width: 100%;
+    margin-top: 1.25rem;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1416,6 +1424,18 @@ body {
   .icon-btn {
     width: 34px;
     height: 34px;
+  }
+  .daily-item {
+    grid-template-columns: 68px 24px 1fr 75px;
+    gap: 0.5rem;
+    padding: 0.55rem 0.65rem;
+  }
+  .daily-name {
+    font-size: 0.85rem;
+  }
+  .temp-numbers {
+    font-size: 0.8rem;
+    gap: 0.35rem;
   }
 }
 
