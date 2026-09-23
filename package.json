@@ -1,0 +1,13 @@
+{
+  "name": "world-weather-detect",
+  "version": "1.0.0",
+  "description": "World Weather Detect (WWD) - Global Weather Forecast Web Application with live radar and micro-animations",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["weather", "forecast", "radar", "open-meteo", "wwd", "world-weather-detect"],
+  "author": "World Weather Detect (WWD)",
+  "license": "MIT"
+}
