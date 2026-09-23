@@ -1,12 +1,10 @@
 /**
- * SkyPulse - Weather API Service
- * Supports backend PHP / Node proxy with transparent client-side fallback
- * Includes LocalStorage caching with 15-minute TTL
+ * World Weather Detect (WWD) - Weather API Service
+ * High-performance direct Open-Meteo client with local proxy fallback & LocalStorage caching
  */
 
 const ApiService = (() => {
   const CACHE_TTL_MS = 15 * 60 * 1000; // 15 mins
-  const IS_PHP_HOST = window.location.pathname.includes('.php') || window.location.protocol.startsWith('http');
 
   // WMO Weather Interpretation Code Dictionary
   const WMO_CODES = {
@@ -40,13 +38,13 @@ const ApiService = (() => {
 
   function getCache(key) {
     try {
-      const item = localStorage.getItem('skypulse_' + key);
+      const item = localStorage.getItem('wwd_' + key);
       if (!item) return null;
       const parsed = JSON.parse(item);
       if (Date.now() - parsed.timestamp < CACHE_TTL_MS) {
         return parsed.data;
       }
-      localStorage.removeItem('skypulse_' + key);
+      localStorage.removeItem('wwd_' + key);
     } catch (e) {
       console.warn('LocalStorage access issue:', e);
     }
@@ -55,7 +53,7 @@ const ApiService = (() => {
 
   function setCache(key, data) {
     try {
-      localStorage.setItem('skypulse_' + key, JSON.stringify({
+      localStorage.setItem('wwd_' + key, JSON.stringify({
         timestamp: Date.now(),
         data: data
       }));
@@ -64,7 +62,7 @@ const ApiService = (() => {
     }
   }
 
-  async function request(endpoint, fallbackDirectUrl, cacheKey) {
+  async function request(directUrl, proxyUrl, cacheKey) {
     if (cacheKey) {
       const cached = getCache(cacheKey);
       if (cached) return cached;
@@ -72,25 +70,30 @@ const ApiService = (() => {
 
     let result = null;
 
-    // Try relative backend first if served via HTTP server
-    if (IS_PHP_HOST) {
+    // 1. Primary: Direct Open-Meteo API (works globally on GitHub Pages, mobile, desktop with CORS)
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(directUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        result = await res.json();
+      }
+    } catch (err) {
+      console.warn('Direct Open-Meteo call error, attempting proxy fallback:', err);
+    }
+
+    // 2. Secondary fallback: Local PHP/Node backend proxy (only if not on a static host like GitHub Pages)
+    const isStaticHost = window.location.hostname.includes('github.io') || window.location.hostname.includes('netlify');
+    if (!result && proxyUrl && !isStaticHost) {
       try {
-        const res = await fetch(endpoint, { cache: 'no-cache' });
+        const res = await fetch(proxyUrl, { cache: 'no-cache' });
         if (res.ok) {
           result = await res.json();
         }
-      } catch (err) {
-        console.warn('Backend proxy unreachable, falling back to direct API:', err);
+      } catch (proxyErr) {
+        console.warn('Proxy fallback also unavailable:', proxyErr);
       }
-    }
-
-    // Direct fallback if proxy was not reachable or opened directly as file://
-    if (!result && fallbackDirectUrl) {
-      const res = await fetch(fallbackDirectUrl);
-      if (!res.ok) {
-        throw new Error(`Weather service returned HTTP ${res.status}`);
-      }
-      result = await res.json();
     }
 
     if (result && cacheKey) {
@@ -111,13 +114,16 @@ const ApiService = (() => {
     },
 
     async searchCities(query) {
-      if (!query || query.trim().length < 2) return [];
-      const clean = query.trim().toLowerCase();
-      const directUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(clean)}&count=8&language=en&format=json`;
-      const proxyUrl = `api/weather.php?action=search&q=${encodeURIComponent(clean)}`;
+      if (!query || typeof query !== 'string' || query.trim().length < 1) return [];
+      const clean = query.trim();
+      const directUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(clean)}&count=10&language=en&format=json`;
+      const proxyUrl = `api/weather.php?action=search&q=${encodeURIComponent(clean.toLowerCase())}`;
       
-      const res = await request(proxyUrl, directUrl, 'geo_' + clean);
-      return res.results || [];
+      const res = await request(directUrl, proxyUrl, 'geo_' + clean.toLowerCase());
+      if (res && Array.isArray(res.results)) {
+        return res.results;
+      }
+      return [];
     },
 
     async getWeatherData(lat, lon) {
@@ -136,7 +142,9 @@ const ApiService = (() => {
       const directUrl = `https://api.open-meteo.com/v1/forecast?${params.toString()}`;
       const proxyUrl = `api/weather.php?action=weather&lat=${roundedLat}&lon=${roundedLon}`;
 
-      return await request(proxyUrl, directUrl, `weather_${roundedLat}_${roundedLon}`);
+      const res = await request(directUrl, proxyUrl, `weather_${roundedLat}_${roundedLon}`);
+      if (!res) throw new Error('Failed to retrieve weather data from Open-Meteo service');
+      return res;
     },
 
     async getAirQualityData(lat, lon) {
@@ -153,7 +161,7 @@ const ApiService = (() => {
       const directUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?${params.toString()}`;
       const proxyUrl = `api/weather.php?action=air_quality&lat=${roundedLat}&lon=${roundedLon}`;
 
-      return await request(proxyUrl, directUrl, `aqi_${roundedLat}_${roundedLon}`);
+      return await request(directUrl, proxyUrl, `aqi_${roundedLat}_${roundedLon}`);
     }
   };
 })();

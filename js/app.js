@@ -539,80 +539,202 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Search Input & Autocomplete
-  // Search Input, Clear Button & Autocomplete
+  function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  // ==========================================================================
+  // Global Search Engine (Form Submit, Live Autocomplete, Keyboard Nav, Mobile)
+  // ==========================================================================
+  const searchForm = document.getElementById('citySearchForm');
   const searchInput = document.getElementById('citySearchInput');
   const searchDropdown = document.getElementById('searchResultsDropdown');
   const clearSearchBtn = document.getElementById('clearSearchBtn');
   let searchDebounceTimer = null;
+  let activeItemIndex = -1;
+
+  function selectCity(res) {
+    if (!res) return;
+    if (searchDropdown) {
+      searchDropdown.classList.remove('active');
+      searchDropdown.innerHTML = '';
+    }
+    if (searchInput) {
+      searchInput.value = res.name + (res.country ? `, ${res.country}` : '');
+      searchInput.blur(); // Dismiss virtual keyboard on mobile
+    }
+    if (clearSearchBtn) {
+      clearSearchBtn.style.display = 'flex';
+    }
+
+    loadLocationWeather({
+      name: res.name,
+      country: res.country || '',
+      country_code: res.country_code || '',
+      latitude: res.latitude,
+      longitude: res.longitude,
+      timezone: res.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+    });
+
+    showToast(`Weather loaded for ${res.name}${res.country ? ', ' + res.country : ''}`);
+  }
+
+  async function executeDirectSearch(query) {
+    clearTimeout(searchDebounceTimer);
+    const clean = (query || '').trim();
+    if (clean.length < 1) return;
+
+    // 1. If dropdown has a highlighted item, select it
+    if (searchDropdown) {
+      const highlighted = searchDropdown.querySelector('.result-item.highlighted');
+      if (highlighted && highlighted._cityData) {
+        selectCity(highlighted._cityData);
+        return;
+      }
+
+      // 2. If dropdown has any rendered items, select the top match
+      const firstItem = searchDropdown.querySelector('.result-item');
+      if (firstItem && firstItem._cityData) {
+        selectCity(firstItem._cityData);
+        return;
+      }
+    }
+
+    // 3. Otherwise, perform immediate worldwide search
+    showToast(`Searching for "${clean}"...`);
+    try {
+      const results = await ApiService.searchCities(clean);
+      if (results && results.length > 0) {
+        selectCity(results[0]);
+      } else {
+        showToast(`No location found matching "${clean}"`, true);
+      }
+    } catch (err) {
+      console.warn('Direct search error:', err);
+      showToast('Search encountered a network issue. Please try again.', true);
+    }
+  }
+
+  function renderSearchResults(results, query) {
+    if (!searchDropdown) return;
+    searchDropdown.innerHTML = '';
+    activeItemIndex = -1;
+
+    if (!results || results.length === 0) {
+      searchDropdown.innerHTML = `<div style="padding: 1.25rem; text-align: center; color: var(--text-muted); font-size: 0.85rem;">No cities found matching "${escapeHtml(query)}"</div>`;
+      searchDropdown.classList.add('active');
+      return;
+    }
+
+    results.forEach((res, index) => {
+      const item = document.createElement('div');
+      item.className = 'result-item';
+      item._cityData = res;
+      item.setAttribute('role', 'option');
+
+      const adminStr = [res.admin1, res.country].filter(Boolean).join(', ');
+
+      item.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 0.65rem; min-width: 0;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--primary); flex-shrink: 0;">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+            <circle cx="12" cy="10" r="3"></circle>
+          </svg>
+          <div class="result-main" style="min-width: 0; overflow: hidden;">
+            <span class="result-city" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">${escapeHtml(res.name)}</span>
+            <span class="result-admin" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; font-size: 0.75rem; color: var(--text-muted);">${escapeHtml(adminStr)}</span>
+          </div>
+        </div>
+        <span class="result-country" style="flex-shrink: 0;">${escapeHtml(res.country_code || '')}</span>
+      `;
+
+      // Click or touch to select city
+      item.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        selectCity(res);
+      });
+
+      searchDropdown.appendChild(item);
+    });
+
+    searchDropdown.classList.add('active');
+  }
+
+  // Handle Form Submission (Clicking Search button, Pressing Enter on Desktop, or Tapping Search/Go on Mobile Keyboard)
+  if (searchForm) {
+    searchForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      executeDirectSearch(searchInput ? searchInput.value : '');
+    });
+  }
 
   if (searchInput && searchDropdown) {
     searchInput.addEventListener('input', (e) => {
-      const q = e.target.value.trim();
+      const q = e.target.value;
       clearTimeout(searchDebounceTimer);
 
       if (clearSearchBtn) {
-        clearSearchBtn.style.display = q.length > 0 ? 'flex' : 'none';
+        clearSearchBtn.style.display = q.trim().length > 0 ? 'flex' : 'none';
       }
 
-      if (q.length < 2) {
+      if (q.trim().length < 2) {
         searchDropdown.classList.remove('active');
+        searchDropdown.innerHTML = '';
         return;
       }
 
       searchDebounceTimer = setTimeout(async () => {
         try {
-          const results = await ApiService.searchCities(q);
-          if (results && results.length > 0) {
-            searchDropdown.innerHTML = '';
-            results.forEach(res => {
-              const item = document.createElement('div');
-              item.className = 'result-item';
-              item.innerHTML = `
-                <div style="display: flex; align-items: center; gap: 0.65rem;">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--primary); flex-shrink: 0;">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                    <circle cx="12" cy="10" r="3"></circle>
-                  </svg>
-                  <div class="result-main">
-                    <span class="result-city">${res.name}</span>
-                    <span class="result-admin">${res.admin1 ? res.admin1 + ', ' : ''}${res.country || ''}</span>
-                  </div>
-                </div>
-                <span class="result-country">${res.country_code || ''}</span>
-              `;
-              item.addEventListener('click', () => {
-                searchDropdown.classList.remove('active');
-                searchInput.value = '';
-                if (clearSearchBtn) clearSearchBtn.style.display = 'none';
-                loadLocationWeather({
-                  name: res.name,
-                  country: res.country,
-                  country_code: res.country_code,
-                  latitude: res.latitude,
-                  longitude: res.longitude,
-                  timezone: res.timezone
-                });
-              });
-              searchDropdown.appendChild(item);
-            });
-            searchDropdown.classList.add('active');
-          } else {
-            searchDropdown.innerHTML = `<div style="padding: 1.25rem; text-align: center; color: var(--text-muted); font-size: 0.85rem;">No cities found for "${q}"</div>`;
-            searchDropdown.classList.add('active');
+          const results = await ApiService.searchCities(q.trim());
+          if (searchInput.value.trim().toLowerCase() === q.trim().toLowerCase()) {
+            renderSearchResults(results, q.trim());
           }
         } catch (err) {
           console.warn('Geocoding search failed:', err);
         }
-      }, 220);
+      }, 180);
+    });
+
+    // Arrow keys, Enter, and Escape navigation
+    searchInput.addEventListener('keydown', (e) => {
+      const items = searchDropdown.querySelectorAll('.result-item');
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (items.length > 0) {
+          activeItemIndex = (activeItemIndex + 1) % items.length;
+          items.forEach((it, idx) => it.classList.toggle('highlighted', idx === activeItemIndex));
+          items[activeItemIndex].scrollIntoView({ block: 'nearest' });
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (items.length > 0) {
+          activeItemIndex = (activeItemIndex - 1 + items.length) % items.length;
+          items.forEach((it, idx) => it.classList.toggle('highlighted', idx === activeItemIndex));
+          items[activeItemIndex].scrollIntoView({ block: 'nearest' });
+        }
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        executeDirectSearch(searchInput.value);
+      } else if (e.key === 'Escape') {
+        searchDropdown.classList.remove('active');
+      }
     });
 
     // Clear Search Button
     if (clearSearchBtn) {
-      clearSearchBtn.addEventListener('click', () => {
+      clearSearchBtn.addEventListener('click', (e) => {
+        e.preventDefault();
         searchInput.value = '';
         clearSearchBtn.style.display = 'none';
         searchDropdown.classList.remove('active');
+        searchDropdown.innerHTML = '';
         searchInput.focus();
       });
     }
@@ -630,14 +752,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('click', (e) => {
       if (!e.target.closest('.search-wrapper')) {
         searchDropdown.classList.remove('active');
-      }
-    });
-
-    // Enter key triggers first suggestion
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const first = searchDropdown.querySelector('.result-item');
-        if (first) first.click();
       }
     });
   }

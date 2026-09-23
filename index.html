@@ -42,13 +42,13 @@
 
       <!-- Global Search Container -->
       <div class="search-wrapper">
-        <div class="search-box">
-          <div class="search-icon-box" aria-hidden="true">
+        <form id="citySearchForm" class="search-box" action="#" role="search">
+          <button type="submit" id="searchSubmitBtn" class="search-icon-btn" title="Search city" aria-label="Submit search">
             <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
-          </div>
+          </button>
           <input 
             type="text" 
             id="citySearchInput" 
@@ -57,7 +57,7 @@
             autocomplete="off"
             spellcheck="false"
           >
-          <button id="clearSearchBtn" class="clear-search-btn" type="button" title="Clear search" aria-label="Clear search">
+          <button id="clearSearchBtn" class="clear-search-btn" type="button" title="Clear search" aria-label="Clear search" style="display: none;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -72,7 +72,7 @@
             </svg>
             <span class="locate-label">Locate</span>
           </button>
-        </div>
+        </form>
 
         <!-- Autocomplete Suggestions Dropdown -->
         <div id="searchResultsDropdown" class="search-results-dropdown" role="listbox"></div>
